@@ -32,9 +32,7 @@ Esta es la parte mínima que tendrás que entregar para superar este laboratorio
 use('airbnb')
 
 db.listingsAndReviews.countDocuments({
-    "address.country": {
-        $all: ["Spain"]
-    }
+    "address.country": "Spain"
 })
 
 ```
@@ -44,15 +42,17 @@ db.listingsAndReviews.countDocuments({
   - Sólo muestra: nombre, precio, camas y la localidad (`address.market`).
 
 ```js
+
 use('airbnb')
 
 db.listingsAndReviews
 .find(
-    {},
+    {"address.country": "Spain"},
     { _id: 0, name: 1, price: 1, beds: 1, address: { market: 1 } }
 )
 .limit(10)
 .sort({ "price": 1 } )
+
 ```
 
 ### Filtrando
@@ -81,7 +81,7 @@ use('airbnb')
 
 db.listingsAndReviews
 .find(
-    { beds: { $eq: 4 }, bathrooms: { $gte: 2 }, amenities: { $eq: "Wifi" } },
+    { beds: 4, bathrooms: { $gte: 2 }, amenities: { $eq: "Wifi" } },
     { _id: 0, name: 1, price: 1, beds: 1, bathrooms: 1, amenities: 1 }
 )
 .sort({ "price": 1 } )
@@ -95,7 +95,7 @@ use('airbnb')
 
 db.listingsAndReviews
 .find(
-    { beds: { $eq: 4 }, bathrooms: { $gte: 2 }, amenities: { $eq: "Pets allowed" } },
+    { beds: 4, bathrooms: { $gte: 2 }, amenities: { $all: [ "Wifi", "Pets allowed" ] } },
     { _id: 0, name: 1, price: 1, beds: 1, bathrooms: 1, amenities: 1 }
 )
 .sort({ "price": 1 } );
@@ -178,7 +178,7 @@ db.listingsAndReviews
         _id: 0, 
         name: 1, 
         location: "$address.market", 
-        price: "$price" 
+        price: 1 
         } 
     },
 ])
@@ -191,21 +191,15 @@ use('airbnb')
 
 db.listingsAndReviews
  .aggregate([
-    { 
-      $project: {
-        _id: 0,  
-        location: "$address.country", 
-      } 
-    },
     {
       $group: {
-        _id: "$location",
+        _id: "$address.country",
         count: {
           $sum: 1,
         },
       },
     },
-])
+]);
 ```
 
 ## Opcional
@@ -261,10 +255,15 @@ db.listingsAndReviews
     [
         { 
             $group: {
-              _id: "$address.country",  
+              _id: { location: "$address.country" , rooms: "$bedrooms" }, 
               avgPrice: { $avg: "$price" },
-              totalRooms: { $sum: "$bedrooms" }
-            } 
+            },
+        },
+        {
+            $sort: {
+                "_id.location": 1,
+                "_id.rooms": 1,
+            }
         }
     ]
 )
@@ -283,5 +282,41 @@ Queremos mostrar el top 5 de alojamientos más caros en España, con los siguent
 - Servicios, pero en vez de un array, un string con todos los servicios incluidos.
 
 ```js
-// Pega aquí tu consulta
+use("airbnb");
+
+db.listingsAndReviews
+ .aggregate([
+    { $match: { "address.country": "Spain" } },
+    { $sort : { price: -1 } },
+    { $limit : 5 },
+    { $project: {
+        _id: 0, 
+        name: 1, 
+        location: "$address.market", 
+        price: 1,
+        bedrooms: 1,
+        beds: 1,
+        bathrooms: 1,
+        "amenities": {
+            $reduce: {
+              input: "$amenities",
+              initialValue: "",
+              in: {
+                $concat: [
+                  "$$value",
+                  {
+                    $cond: {
+                      if: { $eq: [ "$$value", "" ] },
+                      then: " ",
+                      else: ", "
+                    }
+                  },
+                  "$$this"
+                ]
+              }
+            }
+          }
+        } 
+    },
+])
 ```
